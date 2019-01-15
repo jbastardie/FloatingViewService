@@ -1,13 +1,19 @@
 package com.example.jeremy_ssd.overlaytest3;
 
 import android.app.Service;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.graphics.PixelFormat;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.SystemClock;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -16,6 +22,11 @@ import android.widget.Chronometer;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -30,6 +41,11 @@ public class FloatingViewService extends Service implements View.OnClickListener
     private Context ctx;
     private Chronometer chrono;
     private TextView chronoTexview;
+
+    private UsageStatsManager mUsageStatsManager;
+    private PackageManager mPm;
+    private Long phoneUsageToday = 0L;
+    private float co2Today = 0F;
 
     public FloatingViewService() {
     }
@@ -147,4 +163,97 @@ public class FloatingViewService extends Service implements View.OnClickListener
             chronoTexview.setText("timer: "+elapsedMillis);
         }
     };
+
+    public void updateView() {
+        UsageEvents.Event currentEvent;
+        List<UsageEvents.Event> allEvents = new ArrayList<>();
+        HashMap<String, AppUsageInfo> map = new HashMap<String, AppUsageInfo>();
+
+        long currTime = System.currentTimeMillis();
+        long startTime = currTime - 1000 * 3600 * 20; //querying past three hours
+
+        Calendar date = new GregorianCalendar();
+// reset hour, minutes, seconds and millis
+        date.setTimeInMillis(currTime);
+        //date.set(Calendar.DAY_OF_YEAR, -6);
+        date.set(Calendar.HOUR_OF_DAY, 0);
+        date.set(Calendar.MINUTE, 0);
+        date.set(Calendar.SECOND, 0);
+        date.set(Calendar.MILLISECOND, 0);
+
+        //UsageStatsManager mUsageStatsManager =  (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+
+        assert mUsageStatsManager != null;
+        UsageEvents usageEvents = mUsageStatsManager.queryEvents(date.getTimeInMillis(), currTime);
+
+//capturing all events in a array to compare with next element
+
+        while (usageEvents.hasNextEvent()) {
+            currentEvent = new UsageEvents.Event();
+            usageEvents.getNextEvent(currentEvent);
+            if (currentEvent.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                    currentEvent.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                allEvents.add(currentEvent);
+                String key = currentEvent.getPackageName();
+// taking it into a collection to access by package name
+                if (map.get(key) == null)
+                    map.put(key, new AppUsageInfo(key));
+            }
+        }
+
+//iterating through the arraylist
+        for (int i = 0; i < allEvents.size() - 1; i++) {
+            UsageEvents.Event E0 = allEvents.get(i);
+            UsageEvents.Event E1 = allEvents.get(i + 1);
+
+//for launchCount of apps in time range
+            if (!E0.getPackageName().equals(E1.getPackageName()) && E1.getEventType() == 1) {
+// if true, E1 (launch event of an app) app launched
+                map.get(E1.getPackageName()).launchCount++;
+            }
+
+//for UsageTime of apps in time range
+            if (E0.getEventType() == 1 && E1.getEventType() == 2
+                    && E0.getClassName().equals(E1.getClassName())) {
+                long diff = E1.getTimeStamp() - E0.getTimeStamp();
+                phoneUsageToday += diff; //gloabl Long var for total usagetime in the timerange
+
+                map.get(E0.getPackageName()).timeInForeground += diff;
+                ApplicationInfo appInfo;
+                try {
+                    appInfo = mPm.getApplicationInfo(E0.getPackageName(), 0);
+                } catch (Exception e) {
+                    continue;
+                }
+                Drawable icon;
+                try {
+                    icon = getPackageManager().getApplicationIcon(E0.getPackageName());
+                } catch (Exception e) {
+                    icon = null;
+                }
+                Float ratioCO2 = getRationCO2(appInfo.loadLabel(mPm).toString());
+                if (ratioCO2 != null) {
+                    co2Today += ratioCO2 * (diff / 60000F);
+                }
+                map.get(E0.getPackageName()).co2 = ratioCO2;
+                map.get(E0.getPackageName()).appName = appInfo.loadLabel(mPm).toString();
+                map.get(E0.getPackageName()).appIcon = icon;
+            }
+        }
+    }
+
+    private Float getRationCO2(String appName) {
+        TypedValue outValue = new TypedValue();
+        switch (appName) {
+            case "Facebook":
+                getResources().getValue(R.dimen.Facebook, outValue, true);
+                return outValue.getFloat();
+
+            case "SeLoger":
+                getResources().getValue(R.dimen.SeLoger, outValue, true);
+                return outValue.getFloat();
+            default:
+                return null;
+        }
+    }
 }
