@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.SystemClock;
+import android.text.format.DateUtils;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -45,6 +46,9 @@ public class FloatingViewService extends Service implements View.OnClickListener
     private UsageStatsManager mUsageStatsManager;
     private PackageManager mPm;
     private Long phoneUsageToday = 0L;
+    private Long currentAppUsageToday = 0L;
+    List<UsageEvents.Event> allEvents = new ArrayList<>();
+    HashMap<String, AppUsageInfo> map = new HashMap<String, AppUsageInfo>();
     private float co2Today = 0F;
 
     public FloatingViewService() {
@@ -59,12 +63,14 @@ public class FloatingViewService extends Service implements View.OnClickListener
     public void onCreate() {
         super.onCreate();
         ctx = this;
-        timer.scheduleAtFixedRate(new mainTask(), 0, 5000);
+        timer.scheduleAtFixedRate(new mainTask(), 0, 1000);
         chrono = new Chronometer(ctx);
         chrono.setBase(SystemClock.elapsedRealtime());
         //getting the widget layout from xml using layout inflater
         mFloatingView = LayoutInflater.from(this).inflate(R.layout.layout_floating_widget, null);
         chrono.start();
+        mUsageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        mPm = getPackageManager();
         //setting the layout parameters
         final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -160,17 +166,18 @@ public class FloatingViewService extends Service implements View.OnClickListener
         {
             long elapsedMillis = SystemClock.elapsedRealtime() - chrono.getBase();
             Toast.makeText(getApplicationContext(), "timer: "+elapsedMillis, Toast.LENGTH_SHORT).show();
-            chronoTexview.setText("timer: "+elapsedMillis);
+            updateView();
+
+            chronoTexview.setText("timer: "+DateUtils.formatElapsedTime(currentAppUsageToday / 1000));
+            phoneUsageToday=0l;
         }
     };
 
     public void updateView() {
         UsageEvents.Event currentEvent;
-        List<UsageEvents.Event> allEvents = new ArrayList<>();
-        HashMap<String, AppUsageInfo> map = new HashMap<String, AppUsageInfo>();
 
         long currTime = System.currentTimeMillis();
-        long startTime = currTime - 1000 * 3600 * 20; //querying past three hours
+        long startTime = currTime - 1000; //querying past three hours
 
         Calendar date = new GregorianCalendar();
 // reset hour, minutes, seconds and millis
@@ -184,7 +191,7 @@ public class FloatingViewService extends Service implements View.OnClickListener
         //UsageStatsManager mUsageStatsManager =  (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
 
         assert mUsageStatsManager != null;
-        UsageEvents usageEvents = mUsageStatsManager.queryEvents(date.getTimeInMillis(), currTime);
+        UsageEvents usageEvents = mUsageStatsManager.queryEvents(startTime, currTime);
 
 //capturing all events in a array to compare with next element
 
@@ -202,7 +209,7 @@ public class FloatingViewService extends Service implements View.OnClickListener
         }
 
 //iterating through the arraylist
-        for (int i = 0; i < allEvents.size() - 1; i++) {
+        for (int i = 0; i < allEvents.size()-1 ; i++) {
             UsageEvents.Event E0 = allEvents.get(i);
             UsageEvents.Event E1 = allEvents.get(i + 1);
 
@@ -213,12 +220,20 @@ public class FloatingViewService extends Service implements View.OnClickListener
             }
 
 //for UsageTime of apps in time range
-            if (E0.getEventType() == 1 && E1.getEventType() == 2
+            if (E0.getEventType() == 1
                     && E0.getClassName().equals(E1.getClassName())) {
-                long diff = E1.getTimeStamp() - E0.getTimeStamp();
+                long diff =0;
+                if(E1.getEventType() == 1){
+                    diff = 1000L;
+                }
+
+
                 phoneUsageToday += diff; //gloabl Long var for total usagetime in the timerange
 
                 map.get(E0.getPackageName()).timeInForeground += diff;
+                if( E0.getEventType() == 1){
+                    currentAppUsageToday = map.get(E0.getPackageName()).timeInForeground;
+                }
                 ApplicationInfo appInfo;
                 try {
                     appInfo = mPm.getApplicationInfo(E0.getPackageName(), 0);
