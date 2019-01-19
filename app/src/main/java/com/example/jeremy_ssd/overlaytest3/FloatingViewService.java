@@ -14,6 +14,7 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.SystemClock;
 import android.text.format.DateUtils;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -209,7 +210,7 @@ public class FloatingViewService extends Service implements View.OnClickListener
         }
 
 //iterating through the arraylist
-        for (int i = 0; i < allEvents.size()-1 ; i++) {
+        for (int i = 0; i < allEvents.size() - 1; i++) {
             UsageEvents.Event E0 = allEvents.get(i);
             UsageEvents.Event E1 = allEvents.get(i + 1);
 
@@ -218,31 +219,30 @@ public class FloatingViewService extends Service implements View.OnClickListener
 // if true, E1 (launch event of an app) app launched
                 map.get(E1.getPackageName()).launchCount++;
             }
+        }
 
+        if (allEvents.size() > 0) {
+            UsageEvents.Event E1 = allEvents.get(allEvents.size() - 1);
 //for UsageTime of apps in time range
-            if (E0.getEventType() == 1
-                    && E0.getClassName().equals(E1.getClassName())) {
-                long diff =0;
-                if(E1.getEventType() == 1){
-                    diff = 1000L;
-                }
+            long diff;
+            if (E1.getEventType() == 1) {
+                diff = 1000L;
 
 
                 phoneUsageToday += diff; //gloabl Long var for total usagetime in the timerange
 
-                map.get(E0.getPackageName()).timeInForeground += diff;
-                if( E0.getEventType() == 1){
-                    currentAppUsageToday = map.get(E0.getPackageName()).timeInForeground;
-                }
+                map.get(E1.getPackageName()).timeInForeground += 1000L;
+                currentAppUsageToday = map.get(E1.getPackageName()).timeInForeground;
+                Log.d("myTag", "This is my message");
                 ApplicationInfo appInfo;
                 try {
-                    appInfo = mPm.getApplicationInfo(E0.getPackageName(), 0);
+                    appInfo = mPm.getApplicationInfo(E1.getPackageName(), 0);
                 } catch (Exception e) {
-                    continue;
+                    return;
                 }
                 Drawable icon;
                 try {
-                    icon = getPackageManager().getApplicationIcon(E0.getPackageName());
+                    icon = getPackageManager().getApplicationIcon(E1.getPackageName());
                 } catch (Exception e) {
                     icon = null;
                 }
@@ -250,9 +250,9 @@ public class FloatingViewService extends Service implements View.OnClickListener
                 if (ratioCO2 != null) {
                     co2Today += ratioCO2 * (diff / 60000F);
                 }
-                map.get(E0.getPackageName()).co2 = ratioCO2;
-                map.get(E0.getPackageName()).appName = appInfo.loadLabel(mPm).toString();
-                map.get(E0.getPackageName()).appIcon = icon;
+                map.get(E1.getPackageName()).co2 = ratioCO2;
+                map.get(E1.getPackageName()).appName = appInfo.loadLabel(mPm).toString();
+                map.get(E1.getPackageName()).appIcon = icon;
             }
         }
     }
