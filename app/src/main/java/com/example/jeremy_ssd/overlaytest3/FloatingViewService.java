@@ -1,5 +1,7 @@
 package com.example.jeremy_ssd.overlaytest3;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
@@ -9,10 +11,13 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.SystemClock;
+import android.support.v4.app.NotificationCompat;
+import android.support.v4.app.NotificationManagerCompat;
 import android.text.format.DateUtils;
 import android.util.Log;
 import android.util.TypedValue;
@@ -63,6 +68,8 @@ public class FloatingViewService extends Service implements View.OnClickListener
     @Override
     public void onCreate() {
         super.onCreate();
+        createNotificationChannel();
+
         ctx = this;
         timer.scheduleAtFixedRate(new mainTask(), 0, 1000);
         chrono = new Chronometer(ctx);
@@ -128,6 +135,19 @@ public class FloatingViewService extends Service implements View.OnClickListener
                 return false;
             }
         });
+    }
+
+    public void showNotification(Long startTimeMillis, String appName) {
+        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
+
+        NotificationCompat.Builder notifBuilder = new NotificationCompat.Builder(this, "Appsberg")
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("Temps d'utilisation:")
+                .setContentText(appName+" timer: "+DateUtils.formatElapsedTime(startTimeMillis / 1000))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+
+        // notificationId est un identificateur unique par notification qu'il vous faut définir
+        notificationManager.notify(1, notifBuilder.build());
     }
 
     private class mainTask extends TimerTask
@@ -255,6 +275,7 @@ public class FloatingViewService extends Service implements View.OnClickListener
                 map.get(E1.getPackageName()).appIcon = icon;
             }
         }
+        showNotification(currentAppUsageToday, "test" );
     }
 
     private Float getRationCO2(String appName) {
@@ -269,6 +290,22 @@ public class FloatingViewService extends Service implements View.OnClickListener
                 return outValue.getFloat();
             default:
                 return null;
+        }
+    }
+
+    private void createNotificationChannel() {
+        // Create the NotificationChannel, but only on API 26+ because
+        // the NotificationChannel class is new and not in the support library
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            CharSequence name = getString(R.string.channel_name);
+            String description = getString(R.string.channel_name);
+            int importance = NotificationManager.IMPORTANCE_DEFAULT;
+            NotificationChannel channel = new NotificationChannel("Appsberg", name, importance);
+            channel.setDescription(description);
+            // Register the channel with the system; you can't change the importance
+            // or other notification behaviors after this
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
         }
     }
 }
