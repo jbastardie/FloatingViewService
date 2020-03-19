@@ -175,6 +175,8 @@ public class FloatingViewService extends Service implements View.OnClickListener
 
             case R.id.buttonClose:
                 //closing the widget
+                NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
+                notificationManager.cancelAll();
                 stopSelf();
                 break;
         }
